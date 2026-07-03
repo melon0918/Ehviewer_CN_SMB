@@ -30,7 +30,8 @@
 
         <Preference
             android:key="smb_configure"
-            android:title="@string/smb_configure"
+            android:title="@string/smb_manage_servers"
+            android:summary="@string/smb_manage_servers_summary"
             app:iconSpaceReserved="false" />
     </PreferenceCategory>
 

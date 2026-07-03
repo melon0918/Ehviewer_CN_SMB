@@ -32,9 +32,11 @@ import androidx.annotation.Nullable;
 import androidx.security.crypto.EncryptedSharedPreferences;
 import androidx.security.crypto.MasterKey;
 
+import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.hippo.ehviewer.client.EhConfig;
 import com.hippo.ehviewer.client.EhUtils;
+import com.hippo.ehviewer.client.SmbServerConfig;
 import com.hippo.ehviewer.client.data.FavListUrlBuilder;
 import com.hippo.unifile.SmbFile;
 import com.hippo.ehviewer.client.data.GalleryInfo;
@@ -49,7 +51,9 @@ import com.hippo.lib.yorozuya.MathUtils;
 import com.hippo.lib.yorozuya.NumberUtils;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -733,13 +737,12 @@ public class Settings {
 
     @Nullable
     public static UniFile getDownloadLocation() {
-        // SMB mode: create SmbFile directly with stored credentials
+        // SMB mode: create SmbFile from active server
         if (getSmbEnabled()) {
-            String host = getSmbHost();
-            String share = getSmbShare();
-            if (host != null && !host.isEmpty() && share != null && !share.isEmpty()) {
-                String path = getSmbPath();
-                return new SmbFile(null, host, share, path, getSmbUsername(), getSmbPassword());
+            SmbServerConfig active = getActiveSmbServer();
+            if (active != null) {
+                return new SmbFile(null, active.host, active.share, active.path,
+                        active.username, active.password);
             }
         }
         // Local mode: build URI from stored components
@@ -876,7 +879,11 @@ public class Settings {
     public static final String KEY_SMB_SHARE = "smb_share";
     public static final String KEY_SMB_PATH = "smb_path";
     public static final String KEY_SMB_USERNAME = "smb_username";
+    public static final String KEY_SMB_SERVERS = "smb_servers";
+    public static final String KEY_SMB_ACTIVE_INDEX = "smb_active_index";
+    public static final String KEY_SMB_AUTO_SWITCH = "smb_auto_switch";
     private static final String KEY_SMB_ENCRYPTED_PASSWORD = "smb_password";
+    private static final String KEY_SMB_ENCRYPTED_PASSWORD_PREFIX = "smb_password_";
     private static final String SMB_SECURE_PREFS_NAME = "smb_secure_prefs";
     private static SharedPreferences sSmbSecurePrefs;
 
@@ -961,6 +968,109 @@ public class Settings {
         if (prefs != null) {
             prefs.edit().putString(KEY_SMB_ENCRYPTED_PASSWORD, password).apply();
         }
+    }
+
+    // ---- Multi-server SMB support ----
+
+    @NonNull
+    public static String getSmbPassword(int index) {
+        SharedPreferences prefs = getSmbSecurePrefs();
+        if (prefs != null) {
+            // Try new indexed key first, fall back to legacy key for index 0
+            String key = KEY_SMB_ENCRYPTED_PASSWORD_PREFIX + index;
+            if (prefs.contains(key)) {
+                String password = prefs.getString(key, "");
+                return password != null ? password : "";
+            }
+            if (index == 0) {
+                String password = prefs.getString(KEY_SMB_ENCRYPTED_PASSWORD, "");
+                return password != null ? password : "";
+            }
+        }
+        return "";
+    }
+
+    public static void setSmbPassword(int index, @NonNull String password) {
+        SharedPreferences prefs = getSmbSecurePrefs();
+        if (prefs != null) {
+            prefs.edit().putString(KEY_SMB_ENCRYPTED_PASSWORD_PREFIX + index, password).apply();
+        }
+    }
+
+    @NonNull
+    public static List<SmbServerConfig> getSmbServers() {
+        String json = getString(KEY_SMB_SERVERS, null);
+        if (json == null) {
+            return migrateFromLegacySettings();
+        }
+        try {
+            return JSONArray.parseArray(json, SmbServerConfig.class);
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to parse SMB server list", e);
+            return new ArrayList<>();
+        }
+    }
+
+    public static void setSmbServers(@NonNull List<SmbServerConfig> servers) {
+        String json = JSONArray.toJSONString(servers);
+        putString(KEY_SMB_SERVERS, json);
+    }
+
+    public static int getSmbActiveIndex() {
+        return getInt(KEY_SMB_ACTIVE_INDEX, 0);
+    }
+
+    public static void setSmbActiveIndex(int index) {
+        putInt(KEY_SMB_ACTIVE_INDEX, index);
+    }
+
+    public static boolean getSmbAutoSwitch() {
+        return getBoolean(KEY_SMB_AUTO_SWITCH, false);
+    }
+
+    public static void setSmbAutoSwitch(boolean enabled) {
+        putBoolean(KEY_SMB_AUTO_SWITCH, enabled);
+    }
+
+    @Nullable
+    public static SmbServerConfig getActiveSmbServer() {
+        List<SmbServerConfig> servers = getSmbServers();
+        if (servers.isEmpty()) return null;
+        int index = getSmbActiveIndex();
+        if (index < 0 || index >= servers.size()) {
+            index = 0;
+            setSmbActiveIndex(0);
+        }
+        SmbServerConfig config = servers.get(index);
+        config.password = getSmbPassword(index);
+        return config;
+    }
+
+    @NonNull
+    private static List<SmbServerConfig> migrateFromLegacySettings() {
+        String legacyHost = getSmbHost();
+        String legacyShare = getSmbShare();
+        if (legacyHost == null || legacyHost.isEmpty()
+                || legacyShare == null || legacyShare.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        SmbServerConfig legacy = new SmbServerConfig(
+                legacyHost,
+                legacyShare,
+                getSmbPath(),
+                getSmbUsername(),
+                getSmbPassword() // reads from legacy key
+        );
+
+        List<SmbServerConfig> servers = new ArrayList<>();
+        servers.add(legacy);
+
+        // Write in new format
+        setSmbServers(servers);
+        setSmbPassword(0, legacy.password);
+
+        return servers;
     }
 
     /********************

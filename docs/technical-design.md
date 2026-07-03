@@ -257,7 +257,112 @@ EnumSet.of(SMB2ShareAccess.FILE_SHARE_READ, SMB2ShareAccess.FILE_SHARE_WRITE)
 EnumSet.of(SMB2ShareAccess.FILE_SHARE_READ | SMB2ShareAccess.FILE_SHARE_WRITE)
 ```
 
-## 5. 已知 Bug 与修复记录
+## 5. 多服务器支持
+
+### 5.1 数据模型
+
+```
+SmbServerConfig (POJO, fastjson 序列化)
+  - host: String
+  - share: String  
+  - path: String ("/" 默认)
+  - username: String
+  - password: String (不参与 JSON 序列化, 在 EncryptedSharedPreferences 中以索引键存储)
+```
+
+### 5.2 存储结构
+
+| 键 | 类型 | 说明 |
+|---|------|------|
+| `smb_servers` | JSON 数组 | 不含密码的服务器配置列表 |
+| `smb_active_index` | int | 当前活跃服务器索引, 默认 0 |
+| `smb_auto_switch` | boolean | 自动切换开关, 默认 false |
+| `smb_password_N` | String (加密) | 第 N 个服务器的密码 |
+
+### 5.3 迁移兼容
+
+首次启动自动检查旧 `smb_host/smb_share/smb_path/smb_username/smb_password` 单键配置, 迁移到新 JSON 列表格式 (索引 0), 旧键保留但不再读取。索引密码 `smb_password_0` 优先读取, 不存在时回退到旧 `smb_password` 键。
+
+### 5.4 服务器管理 UI
+
+```
+SmbServerListActivity (ToolbarActivity)
+  - RecyclerView/LinearLayout 显示所有服务器
+  - 标注活跃状态 (> 前缀)
+  - 点击编辑 → SmbConfigActivity (EXTRA_SERVER_INDEX)
+  - 添加 → SmbConfigActivity (默认添加模式)
+  - 删除 → 确认对话框 → 重新索引密码 → 调整活跃索引
+
+SmbConfigActivity 双模式:
+  - 添加模式: 空字段, 保存时 append 到列表
+  - 编辑模式: EXTRA_SERVER_INDEX 指定索引, 预填字段, 保存时替换
+```
+
+## 6. 健康检测与故障切换
+
+### 6.1 健康检测 (healthCheck)
+
+```
+SmbConnectionManager.healthCheck() [STATIC]
+  - 创建独立 SMBClient, 不干扰全局共享连接
+  - SmbConfig: connectTimeout=1500ms, soTimeout=500ms (总计 ≤ 2s)
+  - 流程: connect → authenticate → connectShare
+  - 连接成功即视为可达 (不额外调用 folderExists)
+  - finally 中关闭所有资源 (closeQuietly 链)
+```
+
+### 6.2 故障切换流程
+
+```
+checkDownloadLocation():
+  1. ProgressDialog 阻塞用户操作
+  2. AsyncTask (doInBackground):
+     a. healthCheck 当前活跃服务器 → 成功则返回 1
+     b. 遍历所有其他服务器, 第一个可达的设为活跃 → 返回 2
+     c. 全部不可达 → 返回 3
+  3. onPostExecute:
+     - 关闭 ProgressDialog
+     - 结果 2: Toast 提示已切换
+     - 结果 3 + autoSwitch: 关闭 SMB, Toast 提示
+     - 结果 3 + !autoSwitch: showSmbUnavailableDialog
+```
+
+### 6.3 对话框逻辑
+
+```
+showSmbUnavailableDialog():
+  - "关闭 SMB" → setSmbEnabled(false) + disconnectShared()
+  - "切换到下一台" → 循环切换索引 + 重新 checkDownloadLocation()
+  - "取消" → 保持 SMB 开启
+  (多服务器时显示"切换到下一台"中按钮)
+```
+
+### 6.4 并发安全
+
+```
+getShare() 旧连接延迟清理:
+  - 凭据不匹配时不再立即关闭 sSharedManager
+  - 先交换引用指向新连接
+  - Handler.postDelayed 15 秒后同步清理旧连接
+  - 避免正在进行的流读取操作被中断
+
+onPostExecute 不再调用 disconnectShared():
+  - 健康检查完成后不主动断开共享连接
+  - 连接切换由后续 getShare() 按需处理
+```
+
+## 7. 架构演进
+
+```
+初始设计: 每个操作新建连接 → 连接风暴
+V2:       synchronized 锁串行化创建 → 仍过多连接
+V3:       全局共享连接 + 所有操作 synchronized → 稳定
+V4:       单服务器 → 服务器列表 (JSON + fastjson)
+V5:       ensureDir() → 独立 healthCheck() 线程
+V6:       仅高索引遍历 → 遍历所有服务器
+V7:       立即断开 → 延迟 15s 清理旧连接
+V8:       异步检测无保护 → ProgressDialog 阻塞
+```
 
 ### Bug 1: ensureDir() 路径加倍 (Phase 3)
 

@@ -23,6 +23,7 @@ import static com.hippo.ehviewer.util.ClipboardUtil.createAnnouncerFromClipboard
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.app.ProgressDialog;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.ClipboardManager;
@@ -74,7 +75,10 @@ import com.hippo.ehviewer.client.EhUrl;
 import com.hippo.ehviewer.client.EhUrlOpener;
 import com.hippo.ehviewer.client.EhUtils;
 import com.hippo.ehviewer.client.data.ListUrlBuilder;
+import com.hippo.ehviewer.client.SmbConnectionManager;
+import com.hippo.ehviewer.client.SmbServerConfig;
 import com.hippo.ehviewer.ui.main.UserImageChange;
+import com.hippo.unifile.SmbFile;
 import com.hippo.ehviewer.ui.scene.AnalyticsScene;
 import com.hippo.ehviewer.ui.scene.BaseScene;
 import com.hippo.ehviewer.ui.scene.sign.CookieSignInScene;
@@ -136,6 +140,7 @@ public final class MainActivity extends StageActivity
 
     private static final String KEY_NAV_CHECKED_ITEM = "nav_checked_item";
 //    private static final String KEY_CLIP_TEXT_HASH_CODE = "clip_text_hash_code";
+    private ProgressDialog mSmbCheckDialog;
 
     /*---------------
      Whole life cycle
@@ -519,19 +524,69 @@ public final class MainActivity extends StageActivity
         if (null == uniFile) {
             return;
         }
-        // SMB mode: skip ensureDir on main thread (network I/O)
+        // SMB mode: run health check + failover on background thread (network I/O)
         if (Settings.getSmbEnabled()) {
-            new AsyncTask<Void, Void, Boolean>() {
+            mSmbCheckDialog = new ProgressDialog(this);
+            mSmbCheckDialog.setMessage(getString(R.string.smb_checking));
+            mSmbCheckDialog.setIndeterminate(true);
+            mSmbCheckDialog.setCancelable(false);
+            mSmbCheckDialog.show();
+            new AsyncTask<Void, Void, Integer>() {
+                // Return values: 1 = current server ok, 2 = switched to another server, 3 = all unreachable
+                private int mSwitchedIndex = -1;
+
                 @Override
-                protected Boolean doInBackground(Void... voids) {
-                    return uniFile.ensureDir();
+                protected Integer doInBackground(Void... voids) {
+                    SmbServerConfig active = Settings.getActiveSmbServer();
+                    if (active == null) return 1;
+
+                    // Check current active server
+                    if (SmbConnectionManager.healthCheck(
+                            active.host, active.share,
+                            active.username, active.password)) {
+                        return 1;
+                    }
+
+                    // Failover: try all other servers (not just higher-indexed ones)
+                    List<SmbServerConfig> servers = Settings.getSmbServers();
+                    int currentIndex = Settings.getSmbActiveIndex();
+                    for (int i = 0; i < servers.size(); i++) {
+                        if (i == currentIndex) continue;
+                        SmbServerConfig candidate = servers.get(i);
+                        boolean reachable = SmbConnectionManager.healthCheck(
+                                candidate.host, candidate.share,
+                                candidate.username, Settings.getSmbPassword(i));
+                        if (reachable) {
+                            Settings.setSmbActiveIndex(i);
+                            mSwitchedIndex = i;
+                            return 2;
+                        }
+                    }
+                    return 3;
                 }
 
                 @Override
-                protected void onPostExecute(Boolean result) {
-                    if (!result) {
-                        showInvalidLocationDialog();
+                protected void onPostExecute(Integer result) {
+                    // Dismiss blocking dialog first
+                    if (mSmbCheckDialog != null && mSmbCheckDialog.isShowing()) {
+                        mSmbCheckDialog.dismiss();
+                        mSmbCheckDialog = null;
                     }
+                    if (result == 2) {
+                        // Switched to another server
+                        String host = Settings.getSmbServers().get(mSwitchedIndex).host;
+                        showTip(getString(R.string.smb_switched_server, host),
+                                BaseScene.LENGTH_LONG);
+                    } else if (result == 3) {
+                        // All servers unreachable
+                        if (Settings.getSmbAutoSwitch()) {
+                            Settings.setSmbEnabled(false);
+                            showTip(R.string.smb_all_unavailable, BaseScene.LENGTH_LONG);
+                        } else {
+                            showSmbUnavailableDialog();
+                        }
+                    }
+                    // result == 1: current server ok, nothing to do
                 }
             }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
             return;
@@ -548,6 +603,34 @@ public final class MainActivity extends StageActivity
                 .setMessage(R.string.invalid_download_location)
                 .setPositiveButton(R.string.get_it, null)
                 .show();
+    }
+
+    private void showSmbUnavailableDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this)
+                .setTitle(R.string.waring)
+                .setMessage(R.string.smb_unavailable_message)
+                .setPositiveButton(R.string.smb_disable, (dialog, which) -> {
+                    Settings.setSmbEnabled(false);
+                    SmbFile.disconnectShared();
+                })
+                .setNegativeButton(R.string.cancel, null);
+
+        // Add "Switch to next server" button if there are multiple servers
+        List<SmbServerConfig> servers = Settings.getSmbServers();
+        if (servers.size() > 1) {
+            int currentIndex = Settings.getSmbActiveIndex();
+            int nextIndex = (currentIndex + 1) % servers.size();
+            SmbServerConfig next = servers.get(nextIndex);
+            builder.setNeutralButton(
+                    getString(R.string.smb_switch_server) + " (" + next.host + ")",
+                    (dialog, which) -> {
+                        Settings.setSmbActiveIndex(nextIndex);
+                        SmbFile.disconnectShared();
+                        checkDownloadLocation();
+                    });
+        }
+
+        builder.show();
     }
 
     private void checkCellularNetwork() {

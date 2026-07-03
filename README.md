@@ -10,7 +10,10 @@
 - ✅ 从 SMB 服务器读取已下载画廊
 - ✅ 内置 SMB 文件浏览器（连接测试、目录选择、新建文件夹）
 - ✅ 凭证加密存储（EncryptedSharedPreferences + AES256_GCM）
-- ✅ 单服务器配置，支持切换本地/SMB 存储
+- ✅ **多服务器支持**: 配置多个 SMB 服务器, 支持故障自动/手动切换
+- ✅ **快速健康检测**: 2 秒超时检测 SMB 服务器可达性
+- ✅ **自动切换开关**: 当前服务器不可达时自动尝试下一台
+- ✅ **中文 UI**: 完整中文界面
 - ✅ 基于原版 Ehviewer_CN_SXJ，所有原版功能完整保留
 
 ## 使用
@@ -18,10 +21,12 @@
 1. 下载安装 APK
 2. 进入 **设置 → 下载设置 → SMB Remote Storage**
 3. 开启 **Enable SMB storage**
-4. 点击 **Configure SMB server**
-5. 填入服务器地址、共享名、凭据，点击 **Connect**
-6. 浏览目录并选择下载根目录 → **Select this directory**
-7. 此后下载的画廊将写入 SMB 服务器
+4. 点击 **Manage SMB servers**
+5. 点击 **Add SMB server** 添加服务器
+6. 填入服务器地址、共享名、凭据，点击 **Connect**
+7. 浏览目录并选择下载根目录 → **Select this directory**
+8. 可添加多个服务器，开启 **Auto-switch server** 启用自动故障切换
+9. 此后下载的画廊将写入 SMB 服务器
 
 ## Build
 
@@ -56,20 +61,30 @@ APK 在 `app/build/outputs/apk/appRelease/debug/` 目录下。
 | 差异 | 说明 |
 |------|------|
 | 包名 | `com.ehviewer.smb.debug` |
-| 新增文件 | `SmbFile.java`, `SmbConnectionManager.java`, `SmbUriHandler.java`, `SmbConfigActivity.java` |
-| 修改文件 | `Settings.java`, `EhApplication.java`, `DownloadFragment.java`, `MainActivity.java`, `build.gradle`, `AndroidManifest.xml` |
+| 新增文件 | `SmbFile.java`, `SmbConnectionManager.java`, `SmbUriHandler.java`, `SmbServerConfig.java`, `SmbConfigActivity.java`, `SmbServerListActivity.java` |
+| 修改文件 | `Settings.java`, `EhApplication.java`, `DownloadFragment.java`, `MainActivity.java`, `SmbConnectionManager.java`, `build.gradle`, `AndroidManifest.xml`, `strings.xml` |
 | 遵循约束 | `SpiderDen.java`, `DownloadManager.java`, `SpiderQueen.java`, `GalleryProvider2.java` 未修改 |
 
 ## 已知限制
 
-- `Image.decode()` JNI 需要 `FileInputStream`，SMB 文件读取需全量下载到临时缓存
-- 所有 SMB 操作串行执行（全局共享连接，线程安全同步）
-- 不支持 `createRandomAccessFile()`（SMB 协议无随机访问语义）
-- Android StrictMode 已调整为 `penaltyLog`，主线程 SMB 操作不崩溃但会在日志中记录
+- `Image.decode()` JNI 需要 `FileInputStream`, SMB 文件读取需全量下载到临时缓存
+- 所有 SMB 操作串行执行 (全局共享连接，线程安全同步)
+- 不支持 `createRandomAccessFile()` (SMB 协议无随机访问语义)
+- Android StrictMode 已调整为 `penaltyLog`, 主线程 SMB 操作不崩溃但会在日志中记录
+- 旧 SMB 连接延迟 15 秒清理 (避免中断进行中的读取)
 
 ## Changelog
 
-### SMB 版本 (基于 2.0.1.8)
+### v2.1 (基于 2.0.1.8)
+
+- **多服务器支持**: 配置多个 SMB 服务器, 支持故障自动/手动切换
+- **快速健康检测**: 2 秒超时检测服务器可达性, 启动时弹出 ProgressDialog 防止误操作
+- **故障切换**: 当前服务器不可达时自动或手动切换到下一台
+- **自动切换开关**: 设置中可开启/关闭自动切换
+- **中文 UI**: 完整中文翻译
+- **并发安全优化**: 服务器切换时延迟清理旧连接, 避免中断进行中的读取
+
+### v2.0 (基于 2.0.1.8)
 
 - 添加 SMB 远程存储支持
 - 添加 SMB 连接管理器（超时、重试、全局连接复用）

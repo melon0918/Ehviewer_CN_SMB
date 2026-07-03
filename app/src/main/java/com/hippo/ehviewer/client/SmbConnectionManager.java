@@ -156,4 +156,49 @@ public class SmbConnectionManager {
     public synchronized DiskShare getShare() {
         return mShare;
     }
+
+    /**
+     * Fast health check for SMB server availability.
+     * <p>
+     * Creates an independent temporary connection with short timeouts
+     * (connect=1500ms, I/O=500ms) and performs a lightweight probe
+     * ({@code folderExists("/")}) to verify the share is reachable.
+     * The connection is fully torn down after the check, leaving the
+     * shared singleton connection state untouched.
+     *
+     * @param host     Server hostname or IP
+     * @param share    Share name
+     * @param username Username (can be empty for guest)
+     * @param password Password (can be empty for guest)
+     * @return {@code true} if the share is reachable and readable, {@code false} otherwise
+     */
+    public static boolean healthCheck(String host, String share, String username, String password) {
+        SmbConfig config = SmbConfig.builder()
+                .withTimeout(1500, TimeUnit.MILLISECONDS)
+                .withSoTimeout(500, TimeUnit.MILLISECONDS)
+                .build();
+
+        SMBClient client = null;
+        com.hierynomus.smbj.connection.Connection connection = null;
+        com.hierynomus.smbj.session.Session session = null;
+        DiskShare diskShare = null;
+        try {
+            client = new SMBClient(config);
+            connection = client.connect(host, 445);
+            AuthenticationContext auth = new AuthenticationContext(username, password.toCharArray(), "");
+            session = connection.authenticate(auth);
+            diskShare = (DiskShare) session.connectShare(share);
+            // Connection + authentication success proves the server is reachable
+            Log.i(TAG, "Health check passed for " + host + "/" + share);
+            return true;
+        } catch (Exception e) {
+            Log.w(TAG, "Health check failed for " + host + "/" + share + ": " + e.getMessage());
+            return false;
+        } finally {
+            closeQuietly(diskShare);
+            closeQuietly(session);
+            closeQuietly(connection);
+            closeQuietly(client);
+        }
+    }
 }

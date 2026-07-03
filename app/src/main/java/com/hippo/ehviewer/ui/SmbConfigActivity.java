@@ -37,12 +37,15 @@ import com.google.android.material.textfield.TextInputEditText;
 import com.hippo.ehviewer.R;
 import com.hippo.ehviewer.Settings;
 import com.hippo.ehviewer.client.SmbConnectionManager;
+import com.hippo.ehviewer.client.SmbServerConfig;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 
 public class SmbConfigActivity extends ToolbarActivity {
+
+    public static final String EXTRA_SERVER_INDEX = "smb_server_index";
 
     private TextInputEditText mHostInput;
     private TextInputEditText mShareInput;
@@ -82,22 +85,47 @@ public class SmbConfigActivity extends ToolbarActivity {
         mNewFolderBtn = findViewById(R.id.new_folder);
 
         // Load saved settings
-        String savedHost = Settings.getSmbHost();
-        if (savedHost != null) mHostInput.setText(savedHost);
-        String savedShare = Settings.getSmbShare();
-        if (savedShare != null) mShareInput.setText(savedShare);
-        mUsernameInput.setText(Settings.getSmbUsername());
-        mPasswordInput.setText(Settings.getSmbPassword());
+        int editIndex = getIntent().getIntExtra(EXTRA_SERVER_INDEX, -1);
+        if (editIndex >= 0) {
+            // Edit mode: load from server list
+            List<SmbServerConfig> servers = Settings.getSmbServers();
+            if (editIndex < servers.size()) {
+                SmbServerConfig config = servers.get(editIndex);
+                mHostInput.setText(config.host);
+                mShareInput.setText(config.share);
+                mUsernameInput.setText(config.username);
+                mPasswordInput.setText(Settings.getSmbPassword(editIndex));
+                String savedPath = config.path;
+                mCurrentPath = ("/".equals(savedPath) || savedPath == null) ? "" :
+                        (savedPath.startsWith("/") ? savedPath.substring(1) : savedPath);
+            }
+        } else {
+            // Add mode: load from legacy individual keys for convenience
+            String savedHost = Settings.getSmbHost();
+            if (savedHost != null) mHostInput.setText(savedHost);
+            String savedShare = Settings.getSmbShare();
+            if (savedShare != null) mShareInput.setText(savedShare);
+            mUsernameInput.setText(Settings.getSmbUsername());
+            mPasswordInput.setText(Settings.getSmbPassword());
+        }
 
         mConnectBtn.setOnClickListener(v -> connect());
         mSelectBtn.setOnClickListener(v -> selectCurrentDir());
         mNewFolderBtn.setOnClickListener(v -> showNewFolderDialog());
 
         // Show directory browser if already connected
-        if (Settings.getSmbEnabled() && savedHost != null && savedShare != null) {
-            String savedPath = Settings.getSmbPath();
-            mCurrentPath = (savedPath == null || savedPath.isEmpty() || "/".equals(savedPath)) ? "" : savedPath;
-            connect();
+        if (Settings.getSmbEnabled()) {
+            List<SmbServerConfig> servers = Settings.getSmbServers();
+            if (!servers.isEmpty()) {
+                SmbServerConfig config = servers.get(0);
+                mHostInput.setText(config.host);
+                mShareInput.setText(config.share);
+                mUsernameInput.setText(config.username);
+                mPasswordInput.setText(Settings.getSmbPassword(0));
+                String savedPath = config.path;
+                mCurrentPath = ("/".equals(savedPath) || savedPath == null) ? "" : savedPath;
+                connect();
+            }
         }
     }
 
@@ -148,12 +176,26 @@ public class SmbConfigActivity extends ToolbarActivity {
         String username = mUsernameInput.getText().toString().trim();
         String password = mPasswordInput.getText().toString();
 
-        Settings.setSmbHost(host);
-        Settings.setSmbShare(share);
-        Settings.setSmbUsername(username);
-        Settings.setSmbPassword(password);
         String savePath = mCurrentPath.isEmpty() ? "/" : "/" + mCurrentPath;
-        Settings.setSmbPath(savePath);
+
+        int editIndex = getIntent().getIntExtra(EXTRA_SERVER_INDEX, -1);
+        List<SmbServerConfig> servers = Settings.getSmbServers();
+
+        SmbServerConfig config = new SmbServerConfig(host, share, savePath, username, password);
+
+        if (editIndex >= 0 && editIndex < servers.size()) {
+            // Edit existing server
+            servers.set(editIndex, config);
+            Settings.setSmbPassword(editIndex, password);
+        } else {
+            // Add new server
+            servers.add(config);
+            Settings.setSmbPassword(servers.size() - 1, password);
+            if (servers.size() == 1) {
+                Settings.setSmbActiveIndex(0);
+            }
+        }
+        Settings.setSmbServers(servers);
         Settings.setSmbEnabled(true);
 
         Toast.makeText(this, R.string.smb_dir_selected, Toast.LENGTH_SHORT).show();

@@ -38,7 +38,7 @@ import com.hippo.ehviewer.client.data.GalleryInfo;
 import com.hippo.ehviewer.download.DownloadManager;
 import com.hippo.ehviewer.ui.CommonOperations;
 import com.hippo.ehviewer.ui.DirPickerActivity;
-import com.hippo.ehviewer.ui.SmbConfigActivity;
+import com.hippo.ehviewer.ui.SmbServerListActivity;
 import com.hippo.unifile.UniFile;
 import com.hippo.util.ExceptionUtils;
 import com.hippo.yorozuya.IOUtils;
@@ -185,7 +185,7 @@ public class DownloadFragment extends PreferenceFragmentCompat implements
                     .show();
             return true;
         } else if ("smb_configure".equals(key)) {
-            Intent intent = new Intent(getActivity(), SmbConfigActivity.class);
+            Intent intent = new Intent(getActivity(), SmbServerListActivity.class);
             startActivityForResult(intent, REQUEST_CODE_SMB_CONFIG);
             return true;
         }

@@ -17,6 +17,8 @@
 package com.hippo.unifile;
 
 import android.net.Uri;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.StrictMode;
 import android.util.Log;
 import android.webkit.MimeTypeMap;
@@ -60,6 +62,7 @@ public class SmbFile extends UniFile {
     private static String sConnectUsername;
     private static String sConnectPassword;
     private static File sTempDir;
+    private static final Handler sCleanupHandler = new Handler(Looper.getMainLooper());
 
     /**
      * Set the directory for SMB temporary files (e.g. context.getCacheDir()).
@@ -141,15 +144,21 @@ public class SmbFile extends UniFile {
                 return share;
             }
         }
-        if (sSharedManager != null) {
-            sSharedManager.disconnect();
-        }
+        // Swap to new connection; delay cleanup of old to avoid killing in-flight I/O
+        final SmbConnectionManager oldManager = sSharedManager;
         sSharedManager = new SmbConnectionManager();
         DiskShare share = sSharedManager.connectFast(mHost, mShare, mUsername, mPassword);
         sConnectHost = mHost;
         sConnectShare = mShare;
         sConnectUsername = mUsername;
         sConnectPassword = mPassword;
+        if (oldManager != null) {
+            sCleanupHandler.postDelayed(() -> {
+                synchronized (sLock) {
+                    oldManager.disconnect();
+                }
+            }, 15000);
+        }
         return share;
     }
 

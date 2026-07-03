@@ -196,6 +196,11 @@
             android:label="@string/smb_config"
             android:theme="@style/AppTheme.Toolbar" />
         <activity
+            android:name=".ui.SmbServerListActivity"
+            android:configChanges="screenSize|uiMode"
+            android:label="@string/smb_manage_servers"
+            android:theme="@style/AppTheme.Toolbar" />
+        <activity
             android:name=".ui.LicenseActivity"
             android:configChanges="screenSize|uiMode"
             android:label="@string/license"

@@ -56,6 +56,28 @@ SMB 文件操作涉及网络 I/O, 但部分代码路径在主线程执行:
 - 局部: 每个 SmbFile 方法用 `relaxStrictMode()` + `finally restore` 包裹
 - Stream close(): 内部也要加 StrictMode 保护 (close 也发送 SMB 请求)
 
+### 2.6 健康检测规范
+
+- `healthCheck()` 必须是静态方法, 使用独立连接, 不干扰全局共享连接
+- 超时限制: connect ≤ 1500ms, soTimeout ≤ 500ms (总计 ≤ 2s)
+- 连接 + 认证成功即视为可达, 不额外做 I/O 探测
+- 所有资源在 finally 块中 `closeQuietly` 逆序关闭
+- 由 `checkDownloadLocation()` 的 AsyncTask 统一调用
+
+### 2.7 并发安全规范
+
+- `getShare()` 凭据不匹配时: 交换引用指向新连接, 旧连接通过 Handler.postDelayed 延迟 15s 清理
+- 禁止在健康检查的 `onPostExecute` 中调用 `disconnectShared()`
+- 异步检测结果仅更新 UI/索引, 不主动断开共享连接
+- 连接切换由后续 `getShare()` 按需处理
+
+### 2.8 多服务器存储规范
+
+- 服务器列表使用 fastjson JSON 数组存储在 `smb_servers` 键
+- password 字段不参与 JSON 序列化, 使用 `smb_password_N` 索引键加密存储
+- 删除服务器后必须重新索引密码 (`smb_password_{N}` → `smb_password_{N-1}`)
+- `getActiveSmbServer()` 自动处理索引越界
+
 ## 3. 依赖管理
 
 - SmbJ: `com.hierynomus:smbj:0.13.0` (锁定版本, 不要随意升级)
@@ -103,28 +125,34 @@ FileAttributes.FILE_ATTRIBUTE_DIRECTORY 是枚举值, 判断目录用:
 
 ## 5. 文件清单
 
-### 新增文件 (6个)
+### 新增文件 (9个)
 
 | 文件 | 说明 | 关键依赖 |
 |------|------|---------|
 | `SmbConnectionManager.java` | SMB 连接管理器 | SmbJ SMBClient/Connection/Session/DiskShare |
 | `SmbFile.java` | UniFile SMB 实现 | SmbJ DiskShare, 静态 SmbConnectionManager |
 | `SmbUriHandler.java` | smb:// URI 解析器 | UriHandler 接口 |
+| `SmbServerConfig.java` | 服务器配置 POJO | fastjson |
 | `SmbConfigActivity.java` | SMB 配置 UI | ToolbarActivity, SmbConnectionManager |
+| `SmbServerListActivity.java` | 服务器管理列表 UI | ToolbarActivity, SmbServerConfig |
 | `activity_smb_config.xml` | SMB 配置布局 | Material Design TextInputLayout |
+| `activity_smb_server_list.xml` | 服务器列表布局 | SwitchCompat, ScrollView |
 | `filter_log.ps1` | 日志过滤工具 | PowerShell |
 
-### 修改文件 (7个)
+### 修改文件 (10个)
 
 | 文件 | 变更 |
 |------|------|
 | `app/build.gradle` | 添加 SmbJ + security-crypto 依赖 |
 | `EhApplication.java` | StrictMode 配置, SmbFile 初始化, SmbUriHandler 注册 |
-| `Settings.java` | SMB Key 常量, getter/setter, getDownloadLocation 扩展 |
-| `DownloadFragment.java` | SMB 开关和配置按钮处理 |
-| `MainActivity.java` | checkDownloadLocation 异步化 |
-| `AndroidManifest.xml` | 注册 SmbConfigActivity |
+| `Settings.java` | SMB Key 常量, getter/setter, getDownloadLocation 扩展, JSON 列表存储, 迁移方法 |
+| `DownloadFragment.java` | SMB 开关和配置按钮处理, 重定向到 SmbServerListActivity |
+| `MainActivity.java` | checkDownloadLocation 异步化, 健康检测+故障切换, ProgressDialog |
+| `AndroidManifest.xml` | 注册 SmbConfigActivity + SmbServerListActivity |
 | `download_settings.xml` | 添加 SMB PreferenceCategory |
+| `SmbConfigActivity.java` | 双模式 (添加/编辑), 保存到服务器列表 |
+| `SmbConnectionManager.java` | 新增静态 healthCheck() 方法 |
+| `strings.xml` + `values-zh-rCN/strings.xml` | 多服务器 + 中文 UI 字符串 |
 
 ## 6. 增量更新检查清单
 

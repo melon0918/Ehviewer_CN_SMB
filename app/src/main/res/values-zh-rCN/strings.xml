@@ -975,4 +975,27 @@
     <string name="imported_archive_info_message">这是从本地存储中导入的项目</string>
     <string name="imported_archive_category">本地导入</string>
 
+    <!-- SMB Remote Storage -->
+    <string name="smb_enable_title">SMB 远程存储</string>
+    <string name="smb_enable_summary_on">从 SMB 服务器下载和阅读</string>
+    <string name="smb_enable_summary_off">使用本地存储</string>
+    <string name="smb_configure">配置 SMB 服务器</string>
+    <string name="settings_download_category_smb">SMB 远程存储</string>
+    <string name="smb_unavailable_message">SMB 服务器不可达，下载路径不可用。\n是否关闭 SMB 远程存储？</string>
+    <string name="smb_disable">关闭 SMB</string>
+    <string name="smb_manage_servers">管理 SMB 服务器</string>
+    <string name="smb_manage_servers_summary">配置一个或多个 SMB 服务器，支持自动故障切换</string>
+    <string name="smb_add_server">添加 SMB 服务器</string>
+    <string name="smb_edit_server">编辑</string>
+    <string name="smb_delete_server">删除</string>
+    <string name="smb_delete_server_confirm">确认删除 SMB 服务器 \"%s\"？</string>
+    <string name="smb_switch_server">切换到下一台</string>
+    <string name="smb_switched_server">已切换到 SMB 服务器: %s</string>
+    <string name="smb_all_unavailable">所有 SMB 服务器均不可达</string>
+    <string name="smb_auto_switch">自动切换服务器</string>
+    <string name="smb_auto_switch_summary">当前服务器不可达时自动尝试下一台</string>
+    <string name="smb_active_server">设为活跃</string>
+    <string name="smb_no_servers_configured">暂无 SMB 服务器，点击添加</string>
+    <string name="smb_checking">正在检测 SMB 服务器…</string>
+
 </resources>

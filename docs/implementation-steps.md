@@ -83,37 +83,65 @@
 - [x] Image.decode(FileInputStream) 通过临时文件方式兼容
 - [x] 翻页正常
 
-### Step 3.3 — 回退测试 [ ]
-- [ ] SMB 不可达时下载按钮状态
-- [ ] 阅读时提示内容不可用
-- [ ] SMB 断开/恢复流程
+### Step 3.3 — 回退测试 [✔]
+- [x] SMB 不可达时弹出"SMB 服务器不可达"对话框
+- [x] 可手动切换到下一台服务器或关闭 SMB
+- [x] 自动切换开关启用时静默切换
+- [x] 全部不可达时自动关闭 SMB 总开关
 
 ---
 
-## Phase 4: 缓存优化 [ ]
+## Phase 4: 多服务器支持 [✔]
 
-### Step 4.1 — 缓存策略调整
-- [ ] MODE_READ: 从 SMB 读取后写入本地缓存
-- [ ] MODE_DOWNLOAD: 写入 SMB 同时预热缓存
-- [ ] 增大缓存上限 (通过 Settings 可配置)
+### Step 4.1 — 数据模型 [✔]
+- [x] `SmbServerConfig.java`: host/share/path/username 字段, fastjson 序列化
+- [x] `Settings.java`: JSON 数组存储 `smb_servers`, 索引键密码 `smb_password_N`
+- [x] `getSmbServers()` / `setSmbServers()` / `getActiveSmbServer()` / 迁移方法
+- [x] `getDownloadLocation()` 改为从活跃服务器创建 SmbFile
 
-### Step 4.2 — 缩略图缓存
-- [ ] 分析当前缩略图加载流程
-- [ ] 如有必要: 添加缩略图本地缓存层
+### Step 4.2 — 服务器管理 UI [✔]
+- [x] `SmbServerListActivity.java`: 服务器列表管理 (增删改)
+- [x] `SmbConfigActivity.java`: 双模式 (添加/编辑)
+- [x] 自动切换开关
+- [x] 删除服务器后重新索引密码、调整活跃索引
+
+### Step 4.3 — Export Page Settings [✔]
+- [x] `DownloadFragment.java` 重定向到 SmbServerListActivity
+- [x] `download_settings.xml` 更新配置按钮标题
+- [x] `AndroidManifest.xml` 注册新 Activity
 
 ---
 
-## Phase 5: 打磨 [ ]
+## Phase 5: 健康检测与故障切换 [✔]
 
-### Step 5.1 — 错误处理与用户反馈
-- [ ] SMB 连接失败时的 Toast/Snackbar 提示
-- [ ] 下载设置页显示连接状态
-- [ ] 网络切换时的合理行为
+### Step 5.1 — 快速健康检测 [✔]
+- [x] `SmbConnectionManager.healthCheck()`: 独立连接, 2s 超时
+- [x] 连接成功即视为可达 (移除 folderExists 探测)
+- [x] 静态方法, 不干扰全局共享连接
 
-### Step 5.2 — 清理与文档
+### Step 5.2 — 故障切换 [✔]
+- [x] `checkDownloadLocation()` AsyncTask 统一检测 + 切换
+- [x] 遍历所有非活跃服务器 (修复仅高索引 bug)
+- [x] 手动切换 / 自动切换 / 全部不可达三种分支
+- [x] `ProgressDialog` 阻塞用户操作直至检测完成
+
+### Step 5.3 — 并发安全 [✔]
+- [x] `SmbFile.getShare()`: 延迟 15s 清理旧连接
+- [x] `onPostExecute` 不再调用 `disconnectShared()`
+- [x] 避免健康检查打断正在进行的 SMB 读取
+
+---
+
+## Phase 6: 打磨 [ ]
+
+### Step 6.1 — 中文 UI [✔]
+- [x] `values-zh-rCN/strings.xml`: 21 条 SMB 中文翻译
+- [x] `SmbServerListActivity`: 按钮行垂直居中修复
+
+### Step 6.2 — 清理与文档
 - [ ] 移除调试日志 (Toast 调试输出, Log.e 等)
 - [ ] 确认无硬编码测试值
-- [ ] 更新 devlog
+- [x] 更新 devlog 和开发文档
 
 ---
 
