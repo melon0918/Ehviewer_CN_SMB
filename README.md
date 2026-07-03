@@ -95,7 +95,3 @@ APK 在 `app/build/outputs/apk/appRelease/debug/` 目录下。
 - [okhttp](https://github.com/square/okhttp)
 - [greenDAO](https://github.com/greenrobot/greenDAO)
 - 以及原版使用的所有开源库
-
-## 状态
-
-[![Alt](https://repobeats.axiom.co/api/embed/e6becb5b041dae430dff7f85581aa1f91975d416.svg "Repobeats analytics image")](https://github.com/melon0918/Ehviewer_CN_SMB/pulse)
