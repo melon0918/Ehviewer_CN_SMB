@@ -47,6 +47,26 @@ public class SmbConnectionManager {
     private DiskShare mShare;
 
     /**
+     * Connect to an SMB share with fast failure (no retries, short timeout).
+     * Used for runtime reconnects where we need to fail fast instead of ANR.
+     */
+    public synchronized DiskShare connectFast(String host, String share, String username, String password)
+            throws IOException {
+        disconnect();
+        SmbConfig config = SmbConfig.builder()
+                .withTimeout(2000, TimeUnit.MILLISECONDS)
+                .withSoTimeout(5000, TimeUnit.MILLISECONDS)
+                .build();
+        mClient = new SMBClient(config);
+        mConnection = mClient.connect(host, 445);
+        AuthenticationContext auth = new AuthenticationContext(username, password.toCharArray(), "");
+        mSession = mConnection.authenticate(auth);
+        mShare = (DiskShare) mSession.connectShare(share);
+        Log.i(TAG, "Connected to " + host + "/" + share);
+        return mShare;
+    }
+
+    /**
      * Connect to an SMB share.
      *
      * @param host     Server hostname or IP

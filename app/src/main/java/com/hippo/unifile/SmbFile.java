@@ -145,7 +145,7 @@ public class SmbFile extends UniFile {
             sSharedManager.disconnect();
         }
         sSharedManager = new SmbConnectionManager();
-        DiskShare share = sSharedManager.connect(mHost, mShare, mUsername, mPassword);
+        DiskShare share = sSharedManager.connectFast(mHost, mShare, mUsername, mPassword);
         sConnectHost = mHost;
         sConnectShare = mShare;
         sConnectUsername = mUsername;
@@ -206,7 +206,7 @@ public class SmbFile extends UniFile {
                             EnumSet.of(SMB2CreateOptions.FILE_NON_DIRECTORY_FILE));
                     file.close();
                     return new SmbFile(this, mHost, mShare, childPath, mUsername, mPassword);
-                } catch (IOException e) {
+                } catch (Exception e) {
                     Log.w(TAG, "Failed to createFile " + displayName + ": " + e.getMessage());
                     return null;
                 }
@@ -227,7 +227,7 @@ public class SmbFile extends UniFile {
                     DiskShare share = getShare();
                     share.mkdir(childPath);
                     return new SmbFile(this, mHost, mShare, childPath, mUsername, mPassword);
-                } catch (IOException e) {
+                } catch (Exception e) {
                     Log.w(TAG, "Failed to createDirectory " + displayName + ": " + e.getMessage());
                     return null;
                 }
@@ -270,7 +270,7 @@ public class SmbFile extends UniFile {
             synchronized (sLock) {
                 try {
                     return getShare().folderExists(mPath);
-                } catch (IOException e) {
+                } catch (Exception e) {
                     return false;
                 }
             }
@@ -286,7 +286,7 @@ public class SmbFile extends UniFile {
             synchronized (sLock) {
                 try {
                     return getShare().fileExists(mPath);
-                } catch (IOException e) {
+                } catch (Exception e) {
                     return false;
                 }
             }
@@ -303,7 +303,7 @@ public class SmbFile extends UniFile {
                 try {
                     FileBasicInformation info = getShare().getFileInformation(mPath, FileBasicInformation.class);
                     return info.getLastWriteTime().toEpochMillis();
-                } catch (IOException e) {
+                } catch (Exception e) {
                     return -1;
                 }
             }
@@ -320,7 +320,7 @@ public class SmbFile extends UniFile {
                 try {
                     FileStandardInformation info = getShare().getFileInformation(mPath, FileStandardInformation.class);
                     return info.getEndOfFile();
-                } catch (IOException e) {
+                } catch (Exception e) {
                     return -1;
                 }
             }
@@ -348,7 +348,7 @@ public class SmbFile extends UniFile {
                     if (getShare().folderExists(mPath)) {
                         return true;
                     }
-                } catch (IOException e) {
+                } catch (Exception e) {
                     return false;
                 }
                 final String parentPath = getParentPath();
@@ -361,7 +361,7 @@ public class SmbFile extends UniFile {
                 try {
                     getShare().mkdir(mPath);
                     return true;
-                } catch (IOException e) {
+                } catch (Exception e) {
                     Log.w(TAG, "Failed to create directory " + mPath + ": " + e.getMessage());
                     return false;
                 }
@@ -380,7 +380,7 @@ public class SmbFile extends UniFile {
                     if (getShare().fileExists(mPath)) {
                         return true;
                     }
-                } catch (IOException e) {
+                } catch (Exception e) {
                     return false;
                 }
                 final String parentPath = getParentPath();
@@ -397,7 +397,7 @@ public class SmbFile extends UniFile {
                             EnumSet.of(SMB2CreateOptions.FILE_NON_DIRECTORY_FILE));
                     file.close();
                     return true;
-                } catch (IOException e) {
+                } catch (Exception e) {
                     return false;
                 }
             }
@@ -425,11 +425,11 @@ public class SmbFile extends UniFile {
                     }
                     if (share.folderExists(mPath)) {
                         deleteContents(share, mPath);
-                        share.rm(mPath);
+                        share.rmdir(mPath, true);
                         return true;
                     }
                     return false;
-                } catch (IOException e) {
+                } catch (Exception e) {
                     Log.w(TAG, "Failed to delete " + mPath + ": " + e.getMessage());
                     return false;
                 }
@@ -453,11 +453,17 @@ public class SmbFile extends UniFile {
             final String childPath = path + "/" + name;
             if ((entry.getFileAttributes() & dirAttr) != 0) {
                 deleteContents(share, childPath);
-            }
-            try {
-                share.rm(childPath);
-            } catch (RuntimeException e) {
-                Log.w(TAG, "Failed to delete " + childPath + ": " + e.getMessage());
+                try {
+                    share.rmdir(childPath, true);
+                } catch (RuntimeException e) {
+                    Log.w(TAG, "Failed to delete directory " + childPath + ": " + e.getMessage());
+                }
+            } else {
+                try {
+                    share.rm(childPath);
+                } catch (RuntimeException e) {
+                    Log.w(TAG, "Failed to delete file " + childPath + ": " + e.getMessage());
+                }
             }
         }
     }
@@ -470,7 +476,7 @@ public class SmbFile extends UniFile {
                 try {
                     DiskShare share = getShare();
                     return share.fileExists(mPath) || share.folderExists(mPath);
-                } catch (IOException e) {
+                } catch (Exception e) {
                     return false;
                 }
             }
@@ -499,7 +505,7 @@ public class SmbFile extends UniFile {
                         results.add(new SmbFile(this, mHost, mShare, getChildPath(name), mUsername, mPassword));
                     }
                     return results.toArray(new UniFile[0]);
-                } catch (IOException e) {
+                } catch (Exception e) {
                     Log.w(TAG, "Failed to listFiles " + mPath + ": " + e.getMessage());
                     return null;
                 }
@@ -535,7 +541,7 @@ public class SmbFile extends UniFile {
                         }
                     }
                     return results.toArray(new UniFile[0]);
-                } catch (IOException e) {
+                } catch (Exception e) {
                     Log.w(TAG, "Failed to listFiles " + mPath + ": " + e.getMessage());
                     return null;
                 }
@@ -558,7 +564,7 @@ public class SmbFile extends UniFile {
                         return new SmbFile(this, mHost, mShare, childPath, mUsername, mPassword);
                     }
                     return null;
-                } catch (IOException e) {
+                } catch (Exception e) {
                     return null;
                 }
             }
@@ -588,7 +594,7 @@ public class SmbFile extends UniFile {
                     file.rename(newPath);
                     file.close();
                     return true;
-                } catch (IOException e) {
+                } catch (Exception e) {
                     Log.w(TAG, "Failed to rename " + mPath + " to " + newPath + ": " + e.getMessage());
                     return false;
                 }
