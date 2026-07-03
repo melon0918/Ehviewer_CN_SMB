@@ -13,7 +13,6 @@
 - ✅ **多服务器支持**: 配置多个 SMB 服务器, 支持故障自动/手动切换
 - ✅ **快速健康检测**: 2 秒超时检测 SMB 服务器可达性
 - ✅ **自动切换开关**: 当前服务器不可达时自动尝试下一台
-- ✅ **中文 UI**: 完整中文界面
 - ✅ 基于原版 Ehviewer_CN_SXJ，所有原版功能完整保留
 
 ## 使用
@@ -60,7 +59,7 @@ APK 在 `app/build/outputs/apk/appRelease/debug/` 目录下。
 
 | 差异 | 说明 |
 |------|------|
-| 包名 | `com.ehviewer.smb.debug` |
+| 包名 | `com.ehviewer.smb` |
 | 新增文件 | `SmbFile.java`, `SmbConnectionManager.java`, `SmbUriHandler.java`, `SmbServerConfig.java`, `SmbConfigActivity.java`, `SmbServerListActivity.java` |
 | 修改文件 | `Settings.java`, `EhApplication.java`, `DownloadFragment.java`, `MainActivity.java`, `SmbConnectionManager.java`, `build.gradle`, `AndroidManifest.xml`, `strings.xml` |
 | 遵循约束 | `SpiderDen.java`, `DownloadManager.java`, `SpiderQueen.java`, `GalleryProvider2.java` 未修改 |
